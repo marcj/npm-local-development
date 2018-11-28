@@ -6,6 +6,21 @@ to make it possible to really work locally on multiple packages that are not onl
 
 No need for `NODE_PRESERVE_SYMLINKS` or `preserve-symlinks` workarounds that are only working partially anymore.
 
+## Install
+
+
+```
+npm i -g npm-local-development
+
+cd ./project-with-lerna/
+npm-local-development lerna
+
+cd ./regular-project-with-package.json/
+npm-local-development @vendor/core ../core 
+```
+
+
+
 ## Working on multiple packages locally
 
 When you work on 2 (or more) packages locally where one requires the other,

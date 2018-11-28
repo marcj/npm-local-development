@@ -89,6 +89,54 @@ Whenever you run `lerna bootstrap`, make sure to run `npm-local-development lern
 
 It syncs now your dependencies correctly while your work on them.
 
+## TypeScript-only packages as dependency using ts-node
+
+Per default `ts-node` disables compilation of node_modules. So when you have a core utils package that
+contains only TypeScript, you need to enable compiling for that.
+
+package.json
+```
+  "scripts": {
+    "watch": "node_modules/.bin/ts-node --ignore 'node_modules/(?!@myName)' src/main.ts"
+  }
+```
+
+I recommend to prefix your package names with your vendor name, so you have `@myName/core`, `@myName/app`, `@myName/server` etc.
+
+If you use CLI tools like oclif which initialse ts-node on their own, use the environment variable:
+
+
+bin/run
+```
+process.env['TS_NODE_IGNORE'] = 'node_modules/(?!@myName)';
+
+require('@oclif/command').run()
+.then(require('@oclif/command/flush'))
+.catch(require('@oclif/errors/handle'));
+....
+```
+
+bash:
+```
+TS_NODE_IGNORE='node_modules/(?!@myName)' my-binary
+```
+
+## Angular 2+ TypeScript-only dependency
+
+When working with Angular you need to include your packages in the compilation config:
+
+tsconfig.json
+```
+  "include": [
+    "node_modules/@myName/*/src/**/*.ts"
+  ]
+```
+
+NOTE: Do not reference your packages relatively via `import '../../@myName/core`, as this would break again
+the peerDependency resolution. Work with your local packages as if they have been installed via npm directly, then everything works fine.
+
+Create here an issue at Gtihub https://github.com/marcj/npm-local-development/issues if you encounter problems.
+
 ## This tool solves multiples issues
 
 with local development of NPM packages that are related to each other.

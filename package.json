@@ -1,12 +1,12 @@
 {
   "name": "npm-local-development",
-  "version": "0.1.0",
-  "description": "Replacement for 'npm link' that actually works.",
-  "main": "lib/index.js",
+  "version": "0.1.1",
+  "description": "Replacement for 'npm link' that actually works. Allows to work on multiple packages locally at the same time.",
+  "main": "dist/index.js",
   "files": [
-    "lib"
+    "dist"
   ],
-  "bin": "lib/index.js",
+  "bin": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "prepublishOnly": "npm run build",

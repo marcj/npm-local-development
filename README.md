@@ -19,6 +19,20 @@ cd ./regular-project-with-package.json/
 npm-local-development @vendor/core ../core 
 ```
 
+Example:
+
+```
+➜ npm-local-development lerna
+packages/cli -> @deepkit/core (packages/core)
+packages/cli -> @deepkit/core-node (packages/core-node)
+packages/core-node -> @deepkit/core (packages/core)
+packages/deepkit -> @deepkit/core (packages/core)
+packages/electron -> @deepkit/core (packages/core)
+packages/server -> @deepkit/core (packages/core)
+packages/server -> @deepkit/core-node (packages/core-node)
+Wait for initial sync ...
+Lerna deps setup and watching now ...
+```
 
 
 ## Working on multiple packages locally
@@ -88,10 +102,10 @@ manually. That's not a problem per se, as you could and should add
 those packages to `includes` either way.
 The problem arises when your `other-package` has `peerDependencies`,
 which you have installed in the root package: Node and the compiled won't find them, as it resolves
-the symlink first, and then parent folder of `other-package` resolves to a different once.
-That resolves folder is usually not a children directory of your root package, so it can not find the actual packages
-in `peerDependencies`. Symlinks forces you to install the `peerDependencies` in your `other-package`
-before you can use them correctly in the root package. This leads to transitive instances being broken, see point 2.
+the symlink first, and then the parent folder of `other-package` resolves to a different one.
+That resolved folder is usually not a children directory of your root package, so it can not find the actual packages
+in `peerDependencies` anymore. Also, symlinks forces you to install the `peerDependencies` in your `other-package`
+before you can use them correctly in the root package, but that leads to transitive instances being broken, see point 2.
 
 #### 2. Transitive dependencies break in Node
 
@@ -107,7 +121,7 @@ you execute code in `node_modules/other-package/utils.ts` it will use
 its own RXJS code. You in the root package will use a different version of RXJS.
 
 
-So, when your `other-packages` create for example an `Observable`:
+So, when your `other-packages` creates for example an `Observable`:
 
 ```
 # other-package/index.ts
@@ -137,8 +151,8 @@ observable instanceof Observable; // return false, which breaks stuff
 ```
 
 You see that observable is indeed a `Observable` instance, but not from your `rxjs`
-package, but from the on in `node_modules/other-package/node_modules/rxjs`, which leads to horrible
-errors that are not at all obvious. This tool fixes that if you list `rxjs` in `other-package`'s
+package, but from the one in `node_modules/other-package/node_modules/rxjs`, which leads to horrible
+errors that are not at all obvious. This tool fixes that - if you list `rxjs` in `other-package`'s
 `peerDependencies` as you should (additionally to `devDependencies` so your IDE and
 test scripts still work).
 

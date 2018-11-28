@@ -1,0 +1,43 @@
+{
+  "name": "npm-local-development",
+  "version": "0.1.0",
+  "description": "Replacement for 'npm link' that actually works.",
+  "main": "lib/index.js",
+  "files": [
+    "lib"
+  ],
+  "bin": "lib/index.js",
+  "scripts": {
+    "build": "tsc",
+    "prepublishOnly": "npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/marcj/sync-local-package.git"
+  },
+  "keywords": [
+    "npm",
+    "link",
+    "copy"
+  ],
+  "author": "Marc J. Schmidt",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/marcj/npm-local-development/issues"
+  },
+  "homepage": "https://github.com/marcj/npm-local-development#readme",
+  "devDependencies": {
+    "@types/chokidar": "^1.7.5",
+    "@types/fs-extra": "^5.0.4",
+    "@types/glob": "^7.1.1",
+    "@types/node": "^10.12.10",
+    "@types/shell-escape": "^0.2.0",
+    "typescript": "^3.1.6"
+  },
+  "dependencies": {
+    "chokidar": "^2.0.4",
+    "fs-extra": "^7.0.1",
+    "glob": "^7.1.3"
+  }
+}

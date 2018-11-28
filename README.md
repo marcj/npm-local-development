@@ -97,13 +97,13 @@ contains only TypeScript, you need to enable compiling for that.
 package.json
 ```
   "scripts": {
-    "watch": "node_modules/.bin/ts-node --ignore 'node_modules/(?!@myName)' src/main.ts"
+    "run": "node_modules/.bin/ts-node --ignore 'node_modules/(?!@myName)' src/main.ts"
   }
 ```
 
 I recommend to prefix your package names with your vendor name, so you have `@myName/core`, `@myName/app`, `@myName/server` etc.
 
-If you use CLI tools like oclif which initialse ts-node on their own, use the environment variable:
+If you use CLI tools like oclif which initialses ts-node on their own, use the environment variable:
 
 
 bin/run
@@ -132,8 +132,14 @@ tsconfig.json
   ]
 ```
 
-NOTE: Do not reference your packages relatively via `import '../../@myName/core`, as this would break again
+NOTE: Do not reference your packages relatively via `import '../../@myName/core` in your code, as this would break again
 the peerDependency resolution. Work with your local packages as if they have been installed via npm directly, then everything works fine.
+
+Example:
+
+```
+import {coolFunction} from '@myName/core';
+```
 
 Create here an issue at Gtihub https://github.com/marcj/npm-local-development/issues if you encounter problems.
 

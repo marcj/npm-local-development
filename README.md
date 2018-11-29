@@ -4,8 +4,6 @@ Replacement for `npm link` done right for local development of multiple packages
 It copies files using a watcher instead of using symlinks and excludes "peerDependencies"
 to make it possible to really work locally on multiple packages that are not only a hello world application.
 
-No need for `NODE_PRESERVE_SYMLINKS` or `preserve-symlinks` workarounds that are only working partially anymore.
-
 ## Install
 
 
@@ -32,6 +30,21 @@ packages/server -> @deepkit/core (packages/core)
 packages/server -> @deepkit/core-node (packages/core-node)
 Wait for initial sync ...
 Lerna deps setup and watching now ...
+```
+
+
+Note: When you want to use `npm` (`npm install`, `npm uninstall`, etc) please stop
+npm-local-development first. It reverts the structure back to regular symlinks, so
+npm can continue to work.
+
+Note:
+You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function.
+If you use TypeScript, set compilerOptions `"preserveSymlinks": true`.
+
+Full ts-node call would look like
+
+```
+NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@deepkit)' -- src/main.ts
 ```
 
 

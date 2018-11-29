@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
+import chalk from 'chalk';
 import {resolve, relative, join, basename} from 'path';
-import {watch} from 'chokidar';
+import {FSWatcher, watch} from 'chokidar';
+import {onProcessExit, ThrottleTime} from "./utils";
 
 function printUsage() {
     console.log('Usage: `cd` into your root package folder first, then execute');
@@ -13,6 +15,8 @@ function printUsage() {
 
 async function sync(cwd: string, packageName: string, packageSource: string) {
     const ignored: string[] = [];
+    const rootPackage = fs.readJSONSync(join(cwd, 'package.json')) || {};
+    const rootPackageName = rootPackage['name'];
     const packagePathInRootNodeModules = resolve(cwd, 'node_modules', packageName);
 
     if (!packagePathInRootNodeModules) {
@@ -30,6 +34,10 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
     let peerDeps = {};
     let peerDepsArray: string[] = [];
 
+    function log(...args) {
+        console.log(chalk.green(rootPackageName), ...args);
+    }
+
     function readDeps() {
         const modulePackage = fs.readJSONSync(join(packageSource, 'package.json')) || {};
         peerDeps = modulePackage['peerDependencies'] || {};
@@ -40,13 +48,29 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
         }
     }
 
+    let closed = false;
+    const watchers: FSWatcher[] = [];
+
     readDeps();
+
+    onProcessExit(async () => {
+        closed = true;
+        for (const watcher of watchers) {
+            watcher.close();
+        }
+
+        log(`Exiting, reverting directory structure for ${rootPackageName} (${packagePathInRootNodeModules})`);
+        await fs.remove(packagePathInRootNodeModules);
+        await fs.ensureSymlink(packageSource, packagePathInRootNodeModules);
+    });
 
     if (await fs.pathExists(packagePathInRootNodeModules)) {
         await fs.remove(packagePathInRootNodeModules);
     }
 
     async function updateNodeModulesSymLinks() {
+        if (closed) return;
+
         await fs.remove(join(packagePathInRootNodeModules, 'node_modules'));
 
         const packageNodeModules = join(packageSource, 'node_modules');
@@ -60,7 +84,7 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
 
             const packageJsonPath = join(packageNodeModules, file, 'package.json');
             if (await fs.pathExists(packageJsonPath)) {
-                // console.log('symlink', join(packageNodeModules, file), join(rootNodeModules, file));
+                // log('symlink', join(packageNodeModules, file), join(rootNodeModules, file));
                 fs.ensureSymlinkSync(join(packageNodeModules, file), join(rootNodeModules, file));
             } else {
                 await fs.ensureDir(join(rootNodeModules, file));
@@ -70,7 +94,7 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
                         continue;
                     }
 
-                    // console.log('symlink', join(packageNodeModules, file, subFile), join(rootNodeModules, file, subFile));
+                    // log('symlink', join(packageNodeModules, file, subFile), join(rootNodeModules, file, subFile));
                     fs.ensureSymlinkSync(join(packageNodeModules, file, subFile), join(rootNodeModules, file, subFile));
                 }
             }
@@ -79,8 +103,6 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
         for (const dep of peerDepsArray) {
             await fs.remove(join(rootNodeModules, dep));
         }
-
-        //remove peerDependencies symlinks
     }
 
     try {
@@ -98,75 +120,43 @@ async function sync(cwd: string, packageName: string, packageSource: string) {
     }
 
     await updateNodeModulesSymLinks();
+    const throttledUpdateNodeModulesSymLinks = ThrottleTime(() => updateNodeModulesSymLinks(), 1);
 
-    watch(packageSource + '/package.json', {
+    /**
+     * What for changes in the origin package source, .e.g. '../core/package.json', this is important
+     * to re-read peerDependencies.
+     */
+    watchers.push(watch(packageSource + '/package.json', {
         ignoreInitial: true,
         ignored: ['.git'],
         followSymlinks: false
     }).on('all', (event, path) => {
-        console.log('package.json changed, reload.');
+        log('package.json changed, reload.');
         readDeps();
-        for (const excluded of peerDepsArray) {
-            fs.remove(join(packagePathInRootNodeModules, 'node_modules', excluded));
-        }
-    });
+        throttledUpdateNodeModulesSymLinks();
+    }));
 
-    watch(join(packageSource, 'node_modules'), {
-        ignoreInitial: true,
-        depth: 1,
-        followSymlinks: false
-    }).on('all', async (event, path) => {
 
-        console.log('dep changed', path);
-
-        const baseName = basename(path);
-        if ('node_modules' === baseName) return;
-
-        const modulePath = join(packagePathInRootNodeModules, 'node_modules', baseName);
-
-        if (0 === event.indexOf('unlink')) {
-            // console.log(event, 'unlink', modulePath, path);
-            fs.unlinkSync(modulePath);
-        } else {
-            // console.log(event, 'link', modulePath, path);
-            fs.ensureSymlinkSync(path, modulePath);
-        }
-    });
-
-    watch(packageSource, {
-        ignored: packageSource + '/node_modules/**/*',
+    /**
+     * Watch for changes in origin package source, e.g. '../core/', so we can copy
+     * files manually to our root package's node_modules/{packageName}/
+     */
+    watchers.push(watch(packageSource, {
         ignoreInitial: true,
         followSymlinks: false
     }).on('all', async (event, path) => {
+        if (path.startsWith(resolve(join(packageSource, 'node_modules')))) return;
+
         const target = join(packagePathInRootNodeModules, relative(packageSource, path));
-        // console.log(event, path, '->', target);
+
+        // log(event, relative(cwd, path), '->', relative(packageSource, path));
+
         if (event === 'unlink') {
             fs.unlink(target);
         } else {
             fs.copy(path, target);
         }
-    });
-
-    watch(packageSource + '/node_modules', {
-        ignored: ignored,
-        ignoreInitial: true,
-        followSymlinks: false
-    }).on('all', (event, path) => {
-        const relativePath = relative(packageSource, path);
-        for (const excluded of peerDepsArray) {
-            if (relativePath.startsWith(join('node_modules', excluded))) {
-                return;
-            }
-        }
-
-        const target = join(packagePathInRootNodeModules, relativePath);
-        // console.log(event, 'dep', path, '->', relativePath);
-        if (event === 'unlink') {
-            fs.unlink(target);
-        } else {
-            fs.copy(path, target);
-        }
-    });
+    }));
 }
 
 async function run() {
@@ -222,7 +212,7 @@ async function run() {
                 }
 
                 for (const depToSync in depsToSync) {
-                    console.log(`${packages[pkg]} -> ${depToSync} (${depsToSync[depToSync]})`);
+                    console.log(`${chalk.green(packages[pkg])} -> ${chalk.green(depToSync)} (${depsToSync[depToSync]})`);
                     promises.push(sync(join(cwd, packages[pkg]), depToSync, join(cwd, depsToSync[depToSync])));
                 }
             } catch (error) {

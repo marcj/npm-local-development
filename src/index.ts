@@ -8,14 +8,21 @@ import {onProcessExit, ThrottleTime} from "./utils";
 
 function printUsage() {
     console.log('Usage: `cd` into your root package folder first, then execute');
-    console.log('npm-local-development <package-name> <package-source>');
-    console.log('or');
+    console.log('npm-local-development <package1-name> <package1-source> <package2-name> <package2-source> ...');
+    console.log('or to use Lerna');
     console.log('npm-local-development lerna');
+    console.log('or to read config .sync.json:');
+    console.log('npm-local-development config');
 }
 
 async function sync(cwd: string, packageName: string, packageSource: string) {
     const ignored: string[] = [];
-    const rootPackage = fs.readJSONSync(join(cwd, 'package.json')) || {};
+
+    const packageJsonPath = join(cwd, 'package.json');
+    if (!fs.existsSync(packageJsonPath)) {
+        throw new Error(`package.json not found in current directory. Make sure you're in the right directory. (you're in ${cwd})`);
+    }
+    const rootPackage = fs.readJSONSync(packageJsonPath) || {};
     const rootPackageName = rootPackage['name'];
     const packagePathInRootNodeModules = resolve(cwd, 'node_modules', packageName);
 
@@ -188,7 +195,6 @@ async function run() {
                 const pkgConfig = fs.readJSONSync(join(cwd, pkg, 'package.json'));
                 packages[pkgConfig['name']] = pkg;
             }
-
         }
 
         const promises: Promise<void>[] = [];
@@ -200,7 +206,6 @@ async function run() {
 
                 const deps = pkgConfig['dependencies'] || {};
                 const devDeps = pkgConfig['devDependencies'] || {};
-
                 const depsToSync: { [name: string]: string } = {};
 
                 for (const pkgDep in packages) {
@@ -226,18 +231,49 @@ async function run() {
             return;
         }
 
-        console.log('Wait for initial sync ...');
         await Promise.all(promises);
-        console.log('Lerna deps setup and watching now ...');
+        console.log('Ready');
 
-    } else {
-        const packageName = process.argv[2];
-        const packageSource = resolve(process.argv[3]);
+    } else if ('config' === process.argv[2]) {
+        console.log("Read .sync.json ...");
+        //read .sync.json
+        if (!fs.existsSync(join(cwd, '.sync.json'))) {
+            throw new Error(`No .sync.json file found in current directory.`);
+        }
 
-        console.log('Sync', packageName, packageSource);
-        await sync(cwd, packageName, packageSource);
-        console.log('Watching ... ');
+        const syncConfig = fs.readJSONSync(join(cwd, '.sync.json'));
+        const promises: Promise<void>[] = [];
 
+        for (const cwd in syncConfig) {
+            console.log(`${chalk.green(cwd)}`);
+            for (const i in syncConfig[cwd]) {
+                const packageName = i;
+                const packageSource = syncConfig[cwd][i];
+                console.log(`  ${chalk.green(packageName)} -> ${chalk.green(packageSource)}`);
+                promises.push(sync(cwd, packageName, packageSource));
+            }
+        }
+
+        await Promise.all(promises);
+        console.log('Ready');
+
+    } else if (process.argv.length > 2) {
+        const names = process.argv.slice(2);
+        const packages: { [name: string]: string } = {};
+
+        for (let i = 0; i < names.length; i += 2) {
+            packages[names[i]] = names[i + 1];
+        }
+
+        const promises: Promise<void>[] = [];
+
+        for (const i in packages) {
+            console.log(`${chalk.green(i)} -> ${chalk.green(packages[i])}`);
+            promises.push(sync(cwd, i, packages[i]));
+        }
+
+        await Promise.all(promises);
+        console.log('Ready');
     }
 }
 

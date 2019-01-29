@@ -41,8 +41,6 @@ Note:
 You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function.
 If you use TypeScript, set compilerOptions `"preserveSymlinks": true`.
 
-Full ts-node call would look like
-
 ```
 NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@deepkit)' -- src/main.ts
 ```
@@ -101,6 +99,30 @@ like as it has been installed via npm directly.
 Whenever you run `lerna bootstrap`, make sure to run `npm-local-development lerna` as well.
 
 It syncs now your dependencies correctly while your work on them.
+
+## Working with more complex setup
+
+You can also create a file `.sync.json`:
+
+Let's say you have two packages in your current folder that depends on some
+other shared packages also checked out on your computer:
+
+```
+{
+  "server/": {
+    "@shared/core": "../../my-library-repo/packages/core"
+  },
+  "frontend/": {
+    "@shared/core": "../../my-library-repo/packages/core",
+    "@shared/angular-button": "../../my-library-repo/packages/angular-button"
+  }
+}
+```
+
+First lever keys define a folder path relative to cwd. These should point to
+a directory containing a package.json. Second level keys define
+the actual dependency of that package.json, and its value is the actual relative path to the source
+files of that dependency.
 
 ## TypeScript-only packages as dependency using ts-node
 

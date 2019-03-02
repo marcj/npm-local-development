@@ -1,18 +1,28 @@
 #!/usr/bin/env node
+
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
 import chalk from 'chalk';
-import {resolve, relative, join, basename} from 'path';
+import {join, relative, resolve} from 'path';
 import {FSWatcher, watch} from 'chokidar';
 import {onProcessExit, ThrottleTime} from "./utils";
 
-function printUsage() {
-    console.log('Usage: `cd` into your root package folder first, then execute');
-    console.log('npm-local-development <package1-name> <package1-source> <package2-name> <package2-source> ... [--no-watcher]');
-    console.log('or to use Lerna');
-    console.log('npm-local-development lerna [--no-watcher]');
-    console.log('or to read config .sync.json:');
-    console.log('npm-local-development config [--no-watcher]');
+class LinkedPackage {
+    public links: {
+        [name: string]: {
+            linkedPackageNames: string[]
+        }
+    } = {};
+
+    public addLink(name: string, gotLinkedPackage: string) {
+        if (!this.links[name]) {
+            this.links[name] = {
+                linkedPackageNames: [gotLinkedPackage]
+            };
+        } else {
+            this.links[name].linkedPackageNames.push(gotLinkedPackage);
+        }
+    }
 }
 
 async function sync(cwd: string, packageName: string, packageSource: string, watching = true) {
@@ -43,6 +53,10 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
 
     function log(...args) {
         console.log(chalk.green(rootPackageName), ...args);
+    }
+
+    function error(...args) {
+        console.error(chalk.red(rootPackageName), ...args);
     }
 
     function readDeps() {
@@ -160,130 +174,137 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             if (path.startsWith(resolve(join(packageSource, 'node_modules')))) return;
 
             const target = join(packagePathInRootNodeModules, relative(packageSource, path));
-
             // log(event, relative(cwd, path), '->', relative(packageSource, path));
 
-            if (event === 'unlink') {
-                fs.unlink(target);
-            } else {
-                fs.copy(path, target);
+            if (event === 'unlink' || event === 'unlinkDir') {
+                if (fs.existsSync(target)) {
+                    try {
+                        fs.removeSync(target);
+                    } catch (error) {
+                        error(`(event=${event}) Could unlink ${target}`, error);
+                    }
+                }
+            } else if ('addDir' === event || 'add' === event || 'change' === event) {
+                try {
+                    fs.copySync(path, target);
+                } catch (error) {
+                    error(`(event=${event}) Could not copy ${path} to ${target}`, error);
+                }
             }
         }));
     }
 }
 
-async function run() {
-    if (!process.argv[2] || process.argv[2] === '-h' || process.argv[2] === '--help') {
-        printUsage();
-        return;
+function lerna(cwd: string, watching: boolean, foundPackageFolders: string[], linkedPackages: LinkedPackage): Promise<void>[] {
+    const lernaConfig = fs.readJSONSync(join(cwd, 'lerna.json'));
+    if (!lernaConfig) {
+        throw new Error(`Could not find lerna.json`);
     }
 
+    if (!lernaConfig['packages']) {
+        throw new Error(`No 'packages' defined in lerna.json`);
+    }
+
+    //name to package dir
+    const packages: { [name: string]: string } = {};
+
+    for (const packageGlob of lernaConfig['packages']) {
+        const thisPkgs = glob.sync(packageGlob, {
+            ignore: ['node_modules']
+        });
+
+        for (const pkg of thisPkgs) {
+            const pkgConfig = fs.readJSONSync(join(cwd, pkg, 'package.json'));
+            packages[pkgConfig['name']] = pkg;
+        }
+    }
+
+    const promises: Promise<void>[] = [];
+    for (const pkg in packages) {
+        const path = packages[pkg];
+        foundPackageFolders.push(join(cwd, packages[pkg]));
+
+        try {
+            const pkgConfig = fs.readJSONSync(join(cwd, path, 'package.json'));
+
+            const deps = pkgConfig['dependencies'] || {};
+            const devDeps = pkgConfig['devDependencies'] || {};
+            const depsToSync: { [name: string]: string } = {};
+
+            for (const pkgDep in packages) {
+                if (deps[pkgDep]) {
+                    depsToSync[pkgDep] = packages[pkgDep];
+                } else if (devDeps[pkgDep]) {
+                    depsToSync[pkgDep] = packages[pkgDep];
+                }
+            }
+
+            for (const depToSync in depsToSync) {
+                promises.push(sync(join(cwd, packages[pkg]), depToSync, join(cwd, depsToSync[depToSync]), watching));
+                linkedPackages.addLink(pkgConfig['name'], depToSync);
+            }
+
+        } catch (error) {
+            throw new Error(`Could not read package.json of ${path}`);
+        }
+    }
+
+    return promises;
+}
+
+function config(cwd: string, watching: boolean, foundPackageFolders: string[], linkedPackages: LinkedPackage): Promise<void>[] {
+    if (!fs.existsSync(join(cwd, '.links.json'))) {
+        throw new Error(`No .links.json file found in current directory.`);
+    }
+
+    const syncConfig = fs.readJSONSync(join(cwd, '.links.json'));
+    const promises: Promise<void>[] = [];
+
+    for (const packageFolder of foundPackageFolders) {
+        const pkgConfig = fs.readJSONSync(join(packageFolder, 'package.json'));
+        const dependencies = pkgConfig['dependencies'] || {};
+        const devDependencies = pkgConfig['devDependencies'] || {};
+        const allDependencies = {...dependencies, ...devDependencies};
+
+        for (const packageName in syncConfig) {
+            if (allDependencies[packageName]) {
+                promises.push(sync(packageFolder, packageName, syncConfig[packageName], watching));
+                linkedPackages.addLink(pkgConfig['name'], packageName);
+            }
+        }
+    }
+
+    return promises;
+}
+
+async function run() {
     const watching = process.argv.filter(v => v === '--no-watcher').length === 0;
-    process.argv = process.argv.filter(v => v !== '--no-watcher');
+
+    const linkedPackages = new LinkedPackage;
 
     const cwd = process.cwd();
-    if ('lerna' === process.argv[2]) {
-        const lernaConfig = fs.readJSONSync(join(cwd, 'lerna.json'));
-        if (!lernaConfig) {
-            throw new Error(`Could not find lerna.json`);
-        }
+    const promises: Promise<void>[] = [];
+    const foundPackageFolders: string[] = [];
 
-        if (!lernaConfig['packages']) {
-            throw new Error(`No 'packages' defined in lerna.json`);
-        }
-
-        //name to package dir
-        const packages: { [name: string]: string } = {};
-
-        for (const packageGlob of lernaConfig['packages']) {
-            const thisPkgs = glob.sync(packageGlob, {
-                ignore: ['node_modules']
-            });
-
-            for (const pkg of thisPkgs) {
-                const pkgConfig = fs.readJSONSync(join(cwd, pkg, 'package.json'));
-                packages[pkgConfig['name']] = pkg;
-            }
-        }
-
-        const promises: Promise<void>[] = [];
-        for (const pkg in packages) {
-            const path = packages[pkg];
-
-            try {
-                const pkgConfig = fs.readJSONSync(join(cwd, path, 'package.json'));
-
-                const deps = pkgConfig['dependencies'] || {};
-                const devDeps = pkgConfig['devDependencies'] || {};
-                const depsToSync: { [name: string]: string } = {};
-
-                for (const pkgDep in packages) {
-                    if (deps[pkgDep]) {
-                        depsToSync[pkgDep] = packages[pkgDep];
-                    } else if (devDeps[pkgDep]) {
-                        depsToSync[pkgDep] = packages[pkgDep];
-                    }
-                }
-
-                for (const depToSync in depsToSync) {
-                    console.log(`${chalk.green(packages[pkg])} -> ${chalk.green(depToSync)} (${depsToSync[depToSync]})`);
-                    promises.push(sync(join(cwd, packages[pkg]), depToSync, join(cwd, depsToSync[depToSync]), watching));
-                }
-            } catch (error) {
-                throw new Error(`Could not read package.json of ${path}`);
-            }
-        }
-
-        if (promises.length === 0) {
-            console.error('No packages deps found.');
-            process.exit(1);
-            return;
-        }
-
-        await Promise.all(promises);
-        console.log('Ready');
-
-    } else if ('config' === process.argv[2]) {
-        console.log("Read .sync.json ...");
-        //read .sync.json
-        if (!fs.existsSync(join(cwd, '.sync.json'))) {
-            throw new Error(`No .sync.json file found in current directory.`);
-        }
-
-        const syncConfig = fs.readJSONSync(join(cwd, '.sync.json'));
-        const promises: Promise<void>[] = [];
-
-        for (const cwd in syncConfig) {
-            console.log(`${chalk.green(cwd)}`);
-            for (const i in syncConfig[cwd]) {
-                const packageName = i;
-                const packageSource = syncConfig[cwd][i];
-                console.log(`  ${chalk.green(packageName)} -> ${chalk.green(packageSource)}`);
-                promises.push(sync(cwd, packageName, packageSource, watching));
-            }
-        }
-
-        await Promise.all(promises);
-        console.log('Ready');
-
-    } else if (process.argv.length > 2) {
-        const names = process.argv.slice(2);
-        const packages: { [name: string]: string } = {};
-
-        for (let i = 0; i < names.length; i += 2) {
-            packages[names[i]] = names[i + 1];
-        }
-
-        const promises: Promise<void>[] = [];
-
-        for (const i in packages) {
-            console.log(`${chalk.green(i)} -> ${chalk.green(packages[i])}`);
-            promises.push(sync(cwd, i, packages[i], watching));
-        }
-
-        await Promise.all(promises);
-        console.log('Ready');
+    if (fs.existsSync('./lerna.json')) {
+        console.log("Read lerna.json ...");
+        promises.push(...lerna(cwd, watching, foundPackageFolders, linkedPackages));
     }
+
+    if (fs.existsSync('./.links.json')) {
+        console.log("Read .links.json ...");
+        promises.push(...config(cwd, watching, foundPackageFolders, linkedPackages));
+    }
+
+    for (const name in linkedPackages.links) {
+        console.log(`${chalk.green(name)}`);
+        for (const linkedName of linkedPackages.links[name].linkedPackageNames) {
+            console.log(`  -> ${chalk.green(linkedName)}`);
+        }
+    }
+
+    console.log('Ready');
+    await Promise.all(promises);
 }
 
 run();

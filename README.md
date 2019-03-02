@@ -9,42 +9,104 @@ to make it possible to really work locally on multiple packages that are not onl
 
 ```
 npm i -g npm-local-development
-
-cd ./project-with-lerna/
-npm-local-development lerna
-
-cd ./regular-project-with-package.json/
-npm-local-development @vendor/core ../core 
 ```
 
-Example:
+
+## How to use
+
+You have basically two options:
+
+### 1. Use lerna
+
+If you have already a lerna.json you simply fire `npm-local-development` in the console
+in the same folder where your lerna.json is.
+
+Example output (Lerna only):
 
 ```
-➜ npm-local-development lerna
-packages/cli -> @deepkit/core (packages/core)
-packages/cli -> @deepkit/core-node (packages/core-node)
-packages/core-node -> @deepkit/core (packages/core)
-packages/deepkit -> @deepkit/core (packages/core)
-packages/electron -> @deepkit/core (packages/core)
-packages/server -> @deepkit/core (packages/core)
-packages/server -> @deepkit/core-node (packages/core-node)
-Wait for initial sync ...
-Lerna deps setup and watching now ...
+$ npm-local-development --no-watcher
+Read lerna.json ...
+@deepkit/cli
+  -> @deepkit/core
+  -> @deepkit/core-node
+@deepkit/core-node
+  -> @deepkit/core
+@deepkit/app
+  -> @deepkit/core
+@deepkit/electron
+  -> @deepkit/core
+  -> @deepkit/core-node
+@deepkit/server
+  -> @deepkit/core
+  -> @deepkit/core-node
+Ready
 ```
 
+### 2. Use `.links.json`
+
+You can (additional to lerna possible) create a new file `.links.json` and
+You enter all your links manually:
+
+```
+{
+    "@shared/core": "../../my-library-repo/packages/core",
+    "@shared/angular-button": "../../my-library-repo/packages/angular-button"
+}
+```
+
+
+Example output (Lerna + .links.json):
+
+```
+$ npm-local-development --no-watcher
+Read lerna.json ...
+Read .links.json ...
+@marcj/glut-client
+  -> @marcj/glut-core
+  -> @marcj/estdlib
+  -> @marcj/marshal
+@marcj/glut-integration
+  -> @marcj/glut-client
+  -> @marcj/glut-core
+  -> @marcj/glut-server
+  -> @marcj/estdlib
+  -> @marcj/marshal
+  -> @marcj/marshal-mongo
+@marcj/glut-sample-angular
+  -> @marcj/glut-client
+  -> @marcj/glut-core
+  -> @marcj/glut-server
+  -> @marcj/marshal
+  -> @marcj/marshal-mongo
+@marcj/glut-server
+  -> @marcj/glut-core
+  -> @marcj/estdlib
+  -> @marcj/estdlib-rxjs
+  -> @marcj/marshal
+  -> @marcj/marshal-mongo
+@marcj/glut-core
+  -> @marcj/estdlib-rxjs
+  -> @marcj/marshal
+```
+
+## Arguments
+
+Use `--no-watcher` to run in one time only. Ideal for CI/build environments.
+
+## NOTE: npm install
 
 Note: When you want to use `npm` (`npm install`, `npm uninstall`, etc) please stop
-npm-local-development first. It reverts the structure back to regular symlinks, so
+npm-local-development first. It reverts the structure back, so
 npm can continue to work.
 
-Note:
-You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function.
+## NOTE: Symlinks
+
+Note: You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function.
 If you use TypeScript, set compilerOptions `"preserveSymlinks": true`.
 
 ```
 NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@deepkit)' -- src/main.ts
 ```
-
 
 ## Working on multiple packages locally
 
@@ -53,7 +115,7 @@ you need to link them somehow, so you don't have to publish one and `npm install
 `npm link` was built to allow this, however `npm link` is fundamentally broken with modern architectures.
 See the section below "This tool solves multiples issues" to see why.
 
-If those packages a directly related to each other, you usually should use Lerna to manage them
+If those packages are directly related to each other, you usually should use Lerna to manage them
 all in one Git repository. It will make life way easier.
 
 If that is not an option, you can use this tool nonetheless. Just go in each package and
@@ -76,6 +138,9 @@ It removes the link and syncs now your dependencies correctly while your work on
 Note: This tool does not `npm install` anything. Make sure you have all dependencies installed first.
 If you update dependencies, the tool restarts automatically.
 
+If you have multiple such links, you should use create a .links.json config instead.
+See section "Working with more complex setup".
+
 ## Working with Lerna
 
 Usually, when you use Lerna, you work on multiple packages at the same time. E.g.
@@ -96,33 +161,9 @@ This tool can read your `lerna.json` and syncs the dependencies using a file wat
 all the issues below, so your build tools recognize the `core` as normal package
 like as it has been installed via npm directly.
 
-Whenever you run `lerna bootstrap`, make sure to run `npm-local-development lerna` as well.
+Whenever you run `lerna bootstrap`, make sure to run `npm-local-development` as well.
 
 It syncs now your dependencies correctly while your work on them.
-
-## Working with more complex setup
-
-You can also create a file `.sync.json`:
-
-Let's say you have two packages in your current folder that depends on some
-other shared packages also checked out on your computer:
-
-```
-{
-  "server/": {
-    "@shared/core": "../../my-library-repo/packages/core"
-  },
-  "frontend/": {
-    "@shared/core": "../../my-library-repo/packages/core",
-    "@shared/angular-button": "../../my-library-repo/packages/angular-button"
-  }
-}
-```
-
-First lever keys define a folder path relative to cwd. These should point to
-a directory containing a package.json. Second level keys define
-the actual dependency of that package.json, and its value is the actual relative path to the source
-files of that dependency.
 
 ## TypeScript-only packages as dependency using ts-node
 
@@ -138,7 +179,7 @@ package.json
 
 I recommend to prefix your package names with your vendor name, so you have `@myName/core`, `@myName/app`, `@myName/server` etc.
 
-If you use CLI tools like oclif which initialses ts-node on their own, use the environment variable:
+If you use CLI tools like oclif which initialises ts-node on their own, use the environment variable:
 
 
 bin/run
@@ -176,11 +217,11 @@ Example:
 import {coolFunction} from '@myName/core';
 ```
 
-Create here an issue at Gtihub https://github.com/marcj/npm-local-development/issues if you encounter problems.
+Create here an issue at Github https://github.com/marcj/npm-local-development/issues if you encounter problems.
 
 ## This tool solves multiples issues
 
-with local development of NPM packages that are related to each other.
+with local development of NPM packages that are tightly coupled to each other.
 
 #### 1. Symlinks break build tools and compiler like TypeScript & Angular
 
@@ -194,21 +235,22 @@ which you have installed in the root package: Node and the compiled won't find t
 the symlink first, and then the parent folder of `other-package` resolves to a different one.
 That resolved folder is usually not a children directory of your root package, so it can not find the actual packages
 in `peerDependencies` anymore. Also, symlinks forces you to install the `peerDependencies` in your `other-package`
-before you can use them correctly in the root package, but that leads to transitive instances being broken, see point 2.
+before you can use them correctly in the root package, but that leads to nominal types being broken, see point 2.
 
-#### 2. Transitive dependencies break in Node
+#### 2. Nominal types break
 
 When you npm link `other-package` while you're working on `other-package`,
 which means you have its `devDependencies` installed, those `devDependencies`
 overwrite your dependencies of the root package.
 
-Example: If other-package uses RXJS as devDependencies and installed it
-(because you work on that other-package at the moment)
-you end up having 2 RXJS instances: One on your root `node_modules/rxjs`
-and one in `node_modules/other-package/node_modules/rxjs`. Whenever
-you execute code in `node_modules/other-package/utils.ts` it will use
-its own RXJS code. You in the root package will use a different version of RXJS.
+Example: If `other-package` uses RXJS as devDependencies and installed it
+(because you work on that package at the moment as well)
+you end up having 2 RXJS instances:
+One on your root `node_modules/rxjs`
+and one in `node_modules/other-package/node_modules/rxjs`.
 
+Whenever you execute code in `node_modules/other-package/utils.ts` it will use
+its own RXJS code. You in the root package will use a different version of RXJS.
 
 So, when your `other-packages` creates for example an `Observable`:
 
@@ -241,7 +283,7 @@ observable instanceof Observable; // return false, which breaks stuff
 
 You see that observable is indeed a `Observable` instance, but not from your `rxjs`
 package, but from the one in `node_modules/other-package/node_modules/rxjs`, which leads to horrible
-errors that are not at all obvious. This tool fixes that - if you list `rxjs` in `other-package`'s
+errors that are not at all obvious. This tool fixes that - if (and only IF) you list `rxjs` in `other-package`'s
 `peerDependencies` as you should (additionally to `devDependencies` so your IDE and
 test scripts still work).
 

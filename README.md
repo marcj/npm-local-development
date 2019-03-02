@@ -89,9 +89,22 @@ Read .links.json ...
   -> @marcj/marshal
 ```
 
-## Arguments
+## NOTE: peerDependencies
 
-Use `--no-watcher` to run in one time only. Ideal for CI/build environments.
+Make sure that `devDependencies` that should not be synced (and thus the root package should use its own version)
+are in `peerDependencies` as well, otherwise your dependency will still use
+its own version of its dependencies.
+
+Example:
+
+If you have a @vendor/core package that has rxjs as devDependencies and that should be used by a root package,
+you need to put it (rxjs) also in peerDependencies (in @vendor/core), or @vendor/core will continue to
+use its own version of rxjs, which is not what you want.
+
+You should **not** put rxjs in `dependencies` as this would always lead to
+non nominal instances. All instances of rxjs created by your @vendor/core
+package could not be detected as such using `instanceof` in the root package,
+as you end up having basically two version of rxjs.
 
 ## NOTE: npm install
 
@@ -107,6 +120,11 @@ If you use TypeScript, set compilerOptions `"preserveSymlinks": true`.
 ```
 NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@deepkit)' -- src/main.ts
 ```
+
+## Arguments
+
+Use `--no-watcher` to run in one time only. Ideal for CI/build environments.
+
 
 ## Working on multiple packages locally
 

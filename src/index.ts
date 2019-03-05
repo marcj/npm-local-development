@@ -34,9 +34,9 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
     }
     const rootPackage = fs.readJSONSync(packageJsonPath) || {};
     const rootPackageName = rootPackage['name'];
-    const packagePathInRootNodeModules = resolve(cwd, 'node_modules', packageName);
+    const clonedPackagePathInRootNodeModules = resolve(cwd, 'node_modules', packageName);
 
-    if (!packagePathInRootNodeModules) {
+    if (!clonedPackagePathInRootNodeModules) {
         throw new Error(`Dependency ${packageName} not found. Install it first.`);
     }
 
@@ -82,23 +82,27 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
                 watcher.close();
             }
 
-            log(`Exiting, reverting directory structure for ${rootPackageName} (${packagePathInRootNodeModules})`);
-            await fs.remove(packagePathInRootNodeModules);
-            await fs.ensureSymlink(packageSource, packagePathInRootNodeModules);
+            log(`Exiting, removing cloned ${packageName}, 'npm install ${packageName}' it again. (${clonedPackagePathInRootNodeModules})`);
+            await fs.remove(clonedPackagePathInRootNodeModules);
         });
     }
 
-    if (await fs.pathExists(packagePathInRootNodeModules)) {
-        await fs.remove(packagePathInRootNodeModules);
+    if (await fs.pathExists(clonedPackagePathInRootNodeModules)) {
+        await fs.remove(clonedPackagePathInRootNodeModules);
     }
 
     async function updateNodeModulesSymLinks() {
         if (closed) return;
 
-        await fs.remove(join(packagePathInRootNodeModules, 'node_modules'));
+        await fs.remove(join(clonedPackagePathInRootNodeModules, 'node_modules'));
 
         const packageNodeModules = join(packageSource, 'node_modules');
-        const rootNodeModules = join(packagePathInRootNodeModules, 'node_modules');
+        const clonedPackageNodeModules = join(clonedPackagePathInRootNodeModules, 'node_modules');
+
+        if (!await fs.pathExists(packageNodeModules)) {
+            console.log(`Package has no dependencies installed (${packageSource})`);
+            return;
+        }
 
         for (const file of await fs.readdir(packageNodeModules)) {
             const stat = await fs.lstat(join(packageNodeModules, file));
@@ -109,9 +113,9 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             const packageJsonPath = join(packageNodeModules, file, 'package.json');
             if (await fs.pathExists(packageJsonPath)) {
                 // log('symlink', join(packageNodeModules, file), join(rootNodeModules, file));
-                fs.ensureSymlinkSync(join(packageNodeModules, file), join(rootNodeModules, file));
+                fs.ensureSymlinkSync(join(packageNodeModules, file), join(clonedPackageNodeModules, file));
             } else {
-                await fs.ensureDir(join(rootNodeModules, file));
+                await fs.ensureDir(join(clonedPackageNodeModules, file));
                 for (const subFile of await fs.readdir(join(packageNodeModules, file))) {
                     const stat = await fs.lstat(join(packageNodeModules, file, subFile));
                     if (!stat.isDirectory()) {
@@ -119,18 +123,18 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
                     }
 
                     // log('symlink', join(packageNodeModules, file, subFile), join(rootNodeModules, file, subFile));
-                    fs.ensureSymlinkSync(join(packageNodeModules, file, subFile), join(rootNodeModules, file, subFile));
+                    fs.ensureSymlinkSync(join(packageNodeModules, file, subFile), join(clonedPackageNodeModules, file, subFile));
                 }
             }
         }
 
         for (const dep of peerDepsArray) {
-            await fs.remove(join(rootNodeModules, dep));
+            await fs.remove(join(clonedPackageNodeModules, dep));
         }
     }
 
     try {
-        await fs.copy(packageSource, packagePathInRootNodeModules, {
+        await fs.copy(packageSource, clonedPackagePathInRootNodeModules, {
             filter: (path, dest) => {
                 if (-1 !== path.indexOf('/node_modules/')) {
                     return false;
@@ -139,14 +143,14 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             }
         });
     } catch (error) {
-        console.error('Error in copying', packageSource, 'to', packagePathInRootNodeModules);
+        console.error('Error in copying', packageSource, 'to', clonedPackagePathInRootNodeModules);
         console.error(error);
     }
 
     await updateNodeModulesSymLinks();
 
     if (watching) {
-        const throttledUpdateNodeModulesSymLinks = ThrottleTime(() => updateNodeModulesSymLinks(), 1);
+        const throttledUpdateNodeModulesSymLinks = ThrottleTime(() => updateNodeModulesSymLinks(), 100);
 
         /**
          * What for changes in the origin package source, e.g. '../core/package.json', this is important
@@ -173,7 +177,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
         }).on('all', async (event, path) => {
             if (path.startsWith(resolve(join(packageSource, 'node_modules')))) return;
 
-            const target = join(packagePathInRootNodeModules, relative(packageSource, path));
+            const target = join(clonedPackagePathInRootNodeModules, relative(packageSource, path));
             // log(event, relative(cwd, path), '->', relative(packageSource, path));
 
             if (event === 'unlink' || event === 'unlinkDir') {

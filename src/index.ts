@@ -283,12 +283,29 @@ function config(cwd: string, watching: boolean, foundPackageFolders: string[], l
 
 async function run() {
     const watching = process.argv.filter(v => v === '--no-watcher').length === 0;
+    process.argv = process.argv.filter(v => v !== '--no-watcher');
 
     const linkedPackages = new LinkedPackage;
 
     const cwd = process.cwd();
     const promises: Promise<void>[] = [];
     const foundPackageFolders: string[] = [];
+
+    if (process.argv.length) {
+        for (const foundPackageFolder of process.argv.slice(2)) {
+            if (!fs.pathExistsSync(foundPackageFolder)) {
+                console.error(`Given package path not found: ${foundPackageFolder}`);
+                process.exit(1);
+            }
+
+            if (!fs.pathExistsSync(`${foundPackageFolder}/package.json`)) {
+                console.error(`Given package path is not a npm package (no package.json found): ${foundPackageFolder}`);
+                process.exit(1);
+            }
+
+            foundPackageFolders.push(join(cwd, foundPackageFolder));
+        }
+    }
 
     if (fs.existsSync('./lerna.json')) {
         console.log("Read lerna.json ...");
@@ -305,6 +322,11 @@ async function run() {
         for (const linkedName of linkedPackages.links[name].linkedPackageNames) {
             console.log(`  -> ${chalk.green(linkedName)}`);
         }
+    }
+
+    if (!promises.length) {
+        console.error('No package links found. Either no packages or no links found.');
+        process.exit(1);
     }
 
     console.log('Ready');

@@ -42,9 +42,9 @@ Read lerna.json ...
 Ready
 ```
 
-### 2. Use `.links.json`
+### 2. Use lerna + `.links.json`
 
-You can (additional to lerna possible) create a new file `.links.json` and
+You can additional to lerna possible create a new file `.links.json` and
 You enter all your links manually:
 
 ```
@@ -53,7 +53,6 @@ You enter all your links manually:
     "@shared/angular-button": "../../my-library-repo/packages/angular-button"
 }
 ```
-
 
 Example output (Lerna + .links.json):
 
@@ -88,6 +87,22 @@ Read .links.json ...
   -> @marcj/estdlib-rxjs
   -> @marcj/marshal
 ```
+
+### 3. Use arguments + `.links.json`
+
+Given `.links.json`:
+
+```
+{
+    "@shared/core": "../../my-library-repo/packages/core",
+    "@shared/angular-button": "../../my-library-repo/packages/angular-button"
+}
+```
+
+you need to define which actual root packages should link their dependencies
+to your links.json. So you can define those root packages as argument:
+
+`npm-local-development ./package-a ./package-b ...`
 
 ## NOTE: peerDependencies
 

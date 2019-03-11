@@ -193,9 +193,11 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             } else if ('addDir' === event || 'add' === event) {
                 try {
                     fs.symlinkSync(join(relativePath, relative(packageSource, path)), target);
-                    // fs.symlinkSync(path, target);
                 } catch (error) {
-                    logError(`(event=${event}) Could not link ${target} to ${path}`, error);
+                    //no worries
+                    if (!fs.pathExistsSync(target)) {
+                        logError(`(event=${event}) Could not link ${target} to ${path}`, error);
+                    }
                 }
             }
         }));

@@ -55,7 +55,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
         console.log(chalk.green(rootPackageName), ...args);
     }
 
-    function error(...args) {
+    function logError(...args) {
         console.error(chalk.red(rootPackageName), ...args);
     }
 
@@ -143,8 +143,8 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             }
         });
     } catch (error) {
-        console.error('Error in copying', packageSource, 'to', clonedPackagePathInRootNodeModules);
-        console.error(error);
+        logError('Error in copying', packageSource, 'to', clonedPackagePathInRootNodeModules);
+        logError(error);
     }
 
     await updateNodeModulesSymLinks();
@@ -185,14 +185,14 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
                     try {
                         fs.removeSync(target);
                     } catch (error) {
-                        error(`(event=${event}) Could unlink ${target}`, error);
+                        logError(`(event=${event}) Could unlink ${target}`, error);
                     }
                 }
             } else if ('addDir' === event || 'add' === event || 'change' === event) {
                 try {
                     fs.copySync(path, target);
                 } catch (error) {
-                    error(`(event=${event}) Could not copy ${path} to ${target}`, error);
+                    logError(`(event=${event}) Could not copy ${path} to ${target}`, error);
                 }
             }
         }));

@@ -1,8 +1,8 @@
 # npm-local-development
 
 Replacement for `npm link` done right for local development of multiple packages that are based on each other.
-It copies files using a watcher instead of using symlinks and excludes "peerDependencies"
-to make it possible to really work locally on multiple packages that are not only a hello world application.
+It symlink root files using a watcher and excludes "peerDependencies", instead of using symlinks on the whole root.
+This makes it possible to really work locally on multiple packages that depend on each and have devDependencies checked out.
 
 ## Install
 

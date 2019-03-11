@@ -82,7 +82,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
                 watcher.close();
             }
 
-            log(`Exiting, removing cloned ${packageName}, 'npm install ${packageName}' it again. (${clonedPackagePathInRootNodeModules})`);
+            log(`Exiting, removing cloned ${packageName}.`);
             await fs.remove(clonedPackagePathInRootNodeModules);
         });
     }
@@ -133,17 +133,18 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
         }
     }
 
+    fs.mkdirpSync(clonedPackagePathInRootNodeModules);
+    const relativePath = relative(clonedPackagePathInRootNodeModules, packageSource);
+
     try {
-        await fs.copy(packageSource, clonedPackagePathInRootNodeModules, {
-            filter: (path, dest) => {
-                if (-1 !== path.indexOf('/node_modules/')) {
-                    return false;
-                }
-                return true;
-            }
-        });
+
+        for (const file of fs.readdirSync(packageSource)) {
+            if (file === 'node_modules') continue;
+            fs.symlinkSync(join(relativePath, file), join(clonedPackagePathInRootNodeModules, file));
+
+        }
     } catch (error) {
-        logError('Error in copying', packageSource, 'to', clonedPackagePathInRootNodeModules);
+        logError('Error in symlinks root files in', packageSource, 'to', relativePath);
         logError(error);
     }
 
@@ -168,12 +169,13 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
 
 
         /**
-         * Watch for changes in origin package source, e.g. '../core/', so we can copy
-         * files manually to our root package's node_modules/{packageName}/
+         * Watch for changes in origin package source, e.g. '../core/', so we can link root
+         * files manually to our root package's node_modules/{packageName}/$file.
          */
         watchers.push(watch(packageSource, {
-            ignoreInitial: true,
-            followSymlinks: false
+            ignoreInitial: true, //important, we create symlinks at the very beginning before watching
+            followSymlinks: false,
+            depth: 0
         }).on('all', async (event, path) => {
             if (path.startsWith(resolve(join(packageSource, 'node_modules')))) return;
 
@@ -181,18 +183,19 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             // log(event, relative(cwd, path), '->', relative(packageSource, path));
 
             if (event === 'unlink' || event === 'unlinkDir') {
-                if (fs.existsSync(target)) {
-                    try {
-                        fs.removeSync(target);
-                    } catch (error) {
-                        logError(`(event=${event}) Could unlink ${target}`, error);
-                    }
-                }
-            } else if ('addDir' === event || 'add' === event || 'change' === event) {
                 try {
-                    fs.copySync(path, target);
+                    fs.removeSync(target);
                 } catch (error) {
-                    logError(`(event=${event}) Could not copy ${path} to ${target}`, error);
+                    //no error logging required, as it's common use-case to double remove it, which leads always to
+                    //an error. Also, a it's a symlink, which's target is already deleted, so fs.exists() returns always
+                    //false and lstat throws an error.
+                }
+            } else if ('addDir' === event || 'add' === event) {
+                try {
+                    fs.symlinkSync(join(relativePath, relative(packageSource, path)), target);
+                    // fs.symlinkSync(path, target);
+                } catch (error) {
+                    logError(`(event=${event}) Could not link ${target} to ${path}`, error);
                 }
             }
         }));

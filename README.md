@@ -1,16 +1,14 @@
 # npm-local-development
 
-Replacement for `npm link` done right for local development of multiple packages that are based on each other.
-It symlink root files using a watcher and excludes "peerDependencies", instead of using symlinks on the whole root.
-This makes it possible to really work locally on multiple packages that depend on each and have devDependencies checked out.
+Replacement for `npm link` done right for local development of multiple packages that are based on each other. It
+symlink root files using a watcher and excludes "peerDependencies", instead of using symlinks on the whole root. This
+makes it possible to really work locally on multiple packages that depend on each and have devDependencies checked out.
 
 ## Install
-
 
 ```
 npm i -g npm-local-development
 ```
-
 
 ## How to use
 
@@ -18,8 +16,8 @@ You have basically two options:
 
 ### 1. Use lerna
 
-If you have already a lerna.json you simply fire `npm-local-development` in the console
-in the same folder where your lerna.json is.
+If you have already a lerna.json you simply fire `npm-local-development` in the console in the same folder where your
+lerna.json is.
 
 Example output (Lerna only):
 
@@ -44,8 +42,8 @@ Ready
 
 ### 2. Use lerna + `.links.json`
 
-You can additional to lerna possible create a new file `.links.json` and
-You enter all your links manually:
+In a lerna context, usually only packages managed by lerna are symlinked together. However, it might be handy to link to
+a project outside the current Lerna context. By using a `.links.json` you can do this.
 
 ```
 {
@@ -99,38 +97,30 @@ Given `.links.json`:
 }
 ```
 
-you need to define which actual root packages should link their dependencies
-to your links.json. So you can define those root packages as argument:
+you need to define which actual root packages should link their dependencies to your links.json. So you can define those
+root packages as argument:
 
 `npm-local-development ./package-a ./package-b ...`
 
-## NOTE: peerDependencies
-
-Make sure that `devDependencies` that should not be synced (and thus the root package should use its own version)
-are in `peerDependencies` as well, otherwise your dependency will still use
-its own version of its dependencies.
-
 Example:
 
-If you have a @vendor/core package that has rxjs as devDependencies and that should be used by a root package,
-you need to put it (rxjs) also in peerDependencies (in @vendor/core), or @vendor/core will continue to
-use its own version of rxjs, which is not what you want.
+If you have a @vendor/core package that has rxjs as devDependencies and that should be used by a root package, you need
+to put it (rxjs) also in peerDependencies (in @vendor/core), or @vendor/core will continue to use its own version of
+rxjs, which is not what you want.
 
-You should **not** put rxjs in `dependencies` as this would always lead to
-non nominal instances. All instances of rxjs created by your @vendor/core
-package could not be detected as such using `instanceof` in the root package,
-as you end up having basically two version of rxjs.
+You should **not** put rxjs in `dependencies` as this would always lead to non nominal instances. All instances of rxjs
+created by your @vendor/core package could not be detected as such using `instanceof` in the root package, as you end up
+having basically two version of rxjs.
 
 ## NOTE: npm install
 
-Note: When you want to use `npm` (`npm install`, `npm uninstall`, etc) please stop
-npm-local-development first. It reverts the structure back, so
-npm can continue to work.
+Note: When you want to use `npm` (`npm install`, `npm uninstall`, etc) please stop npm-local-development first. It
+reverts the structure back, so npm can continue to work.
 
 ## NOTE: Symlinks
 
-Note: You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function.
-If you use TypeScript, set compilerOptions `"preserveSymlinks": true`.
+Note: You need to set env `NODE_PRESERVE_SYMLINKS=1` to make this function. If you use TypeScript, set
+compilerOptions `"preserveSymlinks": true`.
 
 ```
 NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@deepkit)' -- src/main.ts
@@ -140,16 +130,15 @@ NODE_PRESERVE_SYMLINKS=1 node_modules/.bin/ts-node --ignore='node_modules\/(?!@d
 
 Use `--no-watcher` to run in one time only. Ideal for CI/build environments.
 
-
 ## Working on multiple packages locally
 
-When you work on 2 (or more) packages locally where one requires the other,
-you need to link them somehow, so you don't have to publish one and `npm install` in the other again and again.
-`npm link` was built to allow this, however `npm link` is fundamentally broken with modern architectures.
-See the section below "This tool solves multiples issues" to see why.
+When you work on 2 (or more) packages locally where one requires the other, you need to link them somehow, so you don't
+have to publish one and `npm install` in the other again and again.
+`npm link` was built to allow this, however `npm link` is fundamentally broken with modern architectures. See the
+section below "This tool solves multiples issues" to see why.
 
-If those packages are directly related to each other, you usually should use Lerna to manage them
-all in one Git repository. It will make life way easier.
+If those packages are directly related to each other, you usually should use Lerna to manage them all in one Git
+repository. It will make life way easier.
 
 If that is not an option, you can use this tool nonetheless. Just go in each package and
 `npm install` as usual. If one package is completely new or not registered in npm registry, use
@@ -165,14 +154,14 @@ If that is not an option, you can use this tool nonetheless. Just go in each pac
 This creates automatically a link (`node_modules/@vendor/other-package -> ../other-package`)
 after running `npm install`.
 
-Use now `npm-local-development @vendor/other-package ../other-package` in your root package folder.
-It removes the link and syncs now your dependencies correctly while your work on them.
+Use now `npm-local-development @vendor/other-package ../other-package` in your root package folder. It removes the link
+and syncs now your dependencies correctly while your work on them.
 
-Note: This tool does not `npm install` anything. Make sure you have all dependencies installed first.
-If you update dependencies, the tool restarts automatically.
+Note: This tool does not `npm install` anything. Make sure you have all dependencies installed first. If you update
+dependencies, the tool restarts automatically.
 
-If you have multiple such links, you should use create a .links.json config instead.
-See section "Working with more complex setup".
+If you have multiple such links, you should use create a .links.json config instead. See section "Working with more
+complex setup".
 
 ## Working with Lerna
 
@@ -186,13 +175,11 @@ root
  \__ server
 ```
 
+When `frontend` and `server` requires the `core` package, Lerna symlinks them automatically, which leads to horrible
+errors that are not obvious at all. See the section below.
 
-When `frontend` and `server` requires the `core` package, Lerna symlinks them automatically,
-which leads to horrible errors that are not obvious at all. See the section below.
-
-This tool can read your `lerna.json` and syncs the dependencies using a file watcher to solves
-all the issues below, so your build tools recognize the `core` as normal package
-like as it has been installed via npm directly.
+This tool can read your `lerna.json` and syncs the dependencies using a file watcher to solves all the issues below, so
+your build tools recognize the `core` as normal package like as it has been installed via npm directly.
 
 Whenever you run `lerna bootstrap`, make sure to run `npm-local-development` as well.
 
@@ -200,22 +187,24 @@ It syncs now your dependencies correctly while your work on them.
 
 ## TypeScript-only packages as dependency using ts-node
 
-Per default `ts-node` disables compilation of node_modules. So when you have a core utils package that
-contains only TypeScript, you need to enable compiling for that.
+Per default `ts-node` disables compilation of node_modules. So when you have a core utils package that contains only
+TypeScript, you need to enable compiling for that.
 
 package.json
+
 ```
   "scripts": {
     "run": "node_modules/.bin/ts-node --ignore 'node_modules/(?!@myName)' src/main.ts"
   }
 ```
 
-I recommend to prefix your package names with your vendor name, so you have `@myName/core`, `@myName/app`, `@myName/server` etc.
+I recommend to prefix your package names with your vendor name, so you have `@myName/core`, `@myName/app`
+, `@myName/server` etc.
 
 If you use CLI tools like oclif which initialises ts-node on their own, use the environment variable:
 
-
 bin/run
+
 ```
 process.env['TS_NODE_IGNORE'] = 'node_modules/(?!@myName)';
 
@@ -226,6 +215,7 @@ require('@oclif/command').run()
 ```
 
 bash:
+
 ```
 TS_NODE_IGNORE='node_modules/(?!@myName)' my-binary
 ```
@@ -235,6 +225,7 @@ TS_NODE_IGNORE='node_modules/(?!@myName)' my-binary
 When working with Angular you need to include your packages in the compilation config:
 
 tsconfig.json
+
 ```
   "include": [
     "node_modules/@myName/*/src/**/*.ts"
@@ -242,7 +233,8 @@ tsconfig.json
 ```
 
 NOTE: Do not reference your packages relatively via `import '../../@myName/core` in your code, as this would break again
-the peerDependency resolution. Work with your local packages as if they have been installed via npm directly, then everything works fine.
+the dependency resolution. Work with your local packages as if they have been installed via npm directly, then
+everything works fine.
 
 Example:
 
@@ -258,22 +250,20 @@ with local development of NPM packages that are tightly coupled to each other.
 
 #### 1. Symlinks break build tools and compiler like TypeScript & Angular
 
-When you npm link a package outside of your build folder (where usually your
-tsconfig.json lies), TypeScript does not compile those files. You
-need to include those file in `"includes": ["../other-package/**/*.ts"]`
-manually. That's not a problem per se, as you could and should add
-those packages to `includes` either way.
-The problem arises when your `other-package` has `peerDependencies`,
-which you have installed in the root package: Node and the compiled won't find them, as it resolves
-the symlink first, and then the parent folder of `other-package` resolves to a different one.
-That resolved folder is usually not a children directory of your root package, so it can not find the actual packages
-in `peerDependencies` anymore. Also, symlinks forces you to install the `peerDependencies` in your `other-package`
-before you can use them correctly in the root package, but that leads to nominal types being broken, see point 2.
+When you npm link a package outside your build folder (where usually your tsconfig.json lies), TypeScript does not
+compile those files. You need to include those file in `"includes": ["../other-package/**/*.ts"]`
+manually. That's not a problem per se, as you could and should add those packages to `includes` either way. The problem
+arises when your `other-package` has `peerDependencies`, which you have installed in the root package: NodeJS and the
+compiled won't find them, as it resolves the symlink first, and then the parent folder of `other-package` resolves to a
+different one. That resolved folder is usually not a children directory of your root package, so it can not find the
+actual packages in `peerDependencies` anymore. Also, symlinks forces you to install the `peerDependencies` in
+your `other-package` before you can use them correctly in the root package, but that leads to nominal types being
+broken, see point 2.
 
 #### 2. Nominal types break
 
-When you npm link `other-package` while you're working on `other-package`,
-which means you have its `devDependencies` installed, those `devDependencies`
+When you npm link `other-package` while you're working on `other-package`, which means you have its `devDependencies`
+installed, those `devDependencies`
 overwrite your dependencies of the root package.
 
 Example: If `other-package` uses RXJS as devDependencies and installed it
@@ -282,8 +272,8 @@ you end up having 2 RXJS instances:
 One on your root `node_modules/rxjs`
 and one in `node_modules/other-package/node_modules/rxjs`.
 
-Whenever you execute code in `node_modules/other-package/utils.ts` it will use
-its own RXJS code. You in the root package will use a different version of RXJS.
+Whenever you execute code in `node_modules/other-package/utils.ts` it will use its own RXJS code. You in the root
+package will use a different version of RXJS.
 
 So, when your `other-packages` creates for example an `Observable`:
 
@@ -315,12 +305,10 @@ observable instanceof Observable; // return false, which breaks stuff
 ```
 
 You see that observable is indeed a `Observable` instance, but not from your `rxjs`
-package, but from the one in `node_modules/other-package/node_modules/rxjs`, which leads to horrible
-errors that are not at all obvious. This tool fixes that - if (and only IF) you list `rxjs` in `other-package`'s
-`peerDependencies` as you should (additionally to `devDependencies` so your IDE and
-test scripts still work).
+package, but from the one in `node_modules/other-package/node_modules/rxjs`, which leads to horrible errors that are not
+at all obvious. This tool fixes that if you list `rxjs` in `other-package`'s `devDependencies` (and optionally in peerDependencies).
 
 #### 3. Symlinks are not automatically synced in WebStorm
 
-WebStorm does not resolve immediately changes made to the target behind symlinks and caches
-the "old" state. Using real files instead, the WebStorm IDE sees immediate changes.
+WebStorm does not resolve immediately changes made to the target behind symlinks and caches the "old" state. Using real
+files instead, the WebStorm IDE sees immediate changes.

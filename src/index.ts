@@ -2,7 +2,7 @@
 
 import * as fs from 'fs-extra';
 import * as glob from 'glob';
-import chalk from 'chalk';
+import * as chalk from 'chalk';
 import {join, relative, resolve} from 'path';
 import {FSWatcher, watch} from 'chokidar';
 import {onProcessExit, ThrottleTime} from "./utils";
@@ -48,8 +48,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
         throw new Error(`Dependency source ${packageName} in '${packageSource}' not found. Install it first.`);
     }
 
-    let peerDeps = {};
-    let peerDepsArray: string[] = [];
+    let devDepsArray: string[] = [];
 
     function log(...args) {
         console.log(chalk.green(rootPackageName), ...args);
@@ -61,11 +60,12 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
 
     function readDeps() {
         const modulePackage = fs.readJSONSync(join(packageSource, 'package.json')) || {};
-        peerDeps = modulePackage['peerDependencies'] || {};
+        const devDeps = modulePackage['devDependencies'] || {};
 
-        for (const i in peerDeps) {
+        for (const i in devDeps) {
+            if (!devDeps.hasOwnProperty(i)) continue;
             ignored.push(join(packageSource, 'node_modules', i) + '/**/*');
-            peerDepsArray.push(i);
+            devDepsArray.push(i);
         }
     }
 
@@ -75,15 +75,9 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
     readDeps();
 
     if (watching) {
-        //we reset the state back when we had a watcher running
         onProcessExit(async () => {
             closed = true;
-            for (const watcher of watchers) {
-                watcher.close();
-            }
-
-            log(`Exiting, removing cloned ${packageName}.`);
-            await fs.remove(clonedPackagePathInRootNodeModules);
+            for (const watcher of watchers) watcher.close();
         });
     }
 
@@ -100,7 +94,6 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
         const clonedPackageNodeModules = join(clonedPackagePathInRootNodeModules, 'node_modules');
 
         if (!await fs.pathExists(packageNodeModules)) {
-            console.log(`Package has no dependencies installed (${packageSource})`);
             return;
         }
 
@@ -128,7 +121,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
             }
         }
 
-        for (const dep of peerDepsArray) {
+        for (const dep of devDepsArray) {
             await fs.remove(join(clonedPackageNodeModules, dep));
         }
     }
@@ -155,7 +148,7 @@ async function sync(cwd: string, packageName: string, packageSource: string, wat
 
         /**
          * What for changes in the origin package source, e.g. '../core/package.json', this is important
-         * to re-read peerDependencies.
+         * to re-read devDependencies.
          */
         watchers.push(watch(packageSource + '/package.json', {
             ignoreInitial: true,

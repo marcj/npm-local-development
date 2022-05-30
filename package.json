@@ -15,7 +15,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/marcj/sync-local-package.git"
+    "url": "git+https://github.com/marcj/npm-local-development.git"
   },
   "keywords": [
     "npm",
